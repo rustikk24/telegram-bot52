@@ -7,6 +7,8 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from aiogram.filters import CommandStart
 
+from aiohttp import web
+
 # ================= CONFIG =================
 
 TOKEN = os.getenv("BOT_TOKEN")
@@ -16,6 +18,22 @@ if not TOKEN:
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+# ================= RENDER FIX =================
+
+async def handle(request):
+    return web.Response(text="Bot is running")
+
+async def web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    port = int(os.getenv("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
 
 # ================= DB =================
 
@@ -53,20 +71,16 @@ def is_owner(user_id: int):
 
 @dp.message(CommandStart())
 async def start(m: Message):
-    cursor.execute(
-        "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
-        (m.from_user.id,)
-    )
+    cursor.execute("INSERT OR IGNORE INTO users VALUES (?)", (m.from_user.id,))
     conn.commit()
-
     await m.answer("👋 Бот работает")
 
-# ================= TOURNAMENT CREATION =================
+# ================= FSM TOUR =================
 
 tour_state = {}
 
 @dp.message(F.text.startswith("/tour"))
-async def tour(m: Message):
+async def tour_start(m: Message):
     if not is_owner(m.from_user.id):
         return await m.answer("❌ нет доступа")
 
@@ -84,16 +98,17 @@ async def tour_flow(m: Message):
         try:
             data["number"] = int(m.text)
         except:
-            return await m.answer("Введите число")
+            return await m.answer("❌ Введите число")
+
         return await m.answer("📝 Название турнира")
 
     if "name" not in data:
         data["name"] = m.text
-        return await m.answer("📅 Дата")
+        return await m.answer("📅 Дата (дд.мм.гггг)")
 
     if "date" not in data:
         data["date"] = m.text
-        return await m.answer("⏰ Время")
+        return await m.answer("⏰ Время (чч:мм)")
 
     if "time" not in data:
         data["time"] = m.text
@@ -120,7 +135,7 @@ async def list_t(m: Message):
     rows = cursor.execute("SELECT number, name FROM tournaments").fetchall()
 
     if not rows:
-        return await m.answer("Турниров нет")
+        return await m.answer("Нет турниров")
 
     text = "🏆 Турниры:\n\n"
     for r in rows:
@@ -149,16 +164,10 @@ async def join(m: Message):
 
     price, card = tour
 
-    cursor.execute(
-        "INSERT OR IGNORE INTO users (user_id) VALUES (?)",
-        (m.from_user.id,)
-    )
+    cursor.execute("INSERT OR IGNORE INTO users VALUES (?)", (m.from_user.id,))
     conn.commit()
 
-    await m.answer(
-        f"💰 Цена: {price}\n"
-        f"💳 Карта: {card}"
-    )
+    await m.answer(f"💰 Цена: {price}\n💳 Карта: {card}")
 
 # ================= PRICE =================
 
@@ -167,16 +176,11 @@ async def price(m: Message):
     if not is_owner(m.from_user.id):
         return
 
-    parts = m.text.split()
-    if len(parts) < 3:
-        return await m.answer("Формат: /price 1 100")
-
-    number = int(parts[1])
-    value = int(parts[2])
+    _, number, value = m.text.split()
 
     cursor.execute(
         "UPDATE tournaments SET price=? WHERE number=?",
-        (value, number)
+        (int(value), int(number))
     )
     conn.commit()
 
@@ -190,6 +194,7 @@ async def card(m: Message):
         return
 
     parts = m.text.split(maxsplit=2)
+
     if len(parts) < 3:
         return await m.answer("Формат: /card 1 текст")
 
@@ -212,8 +217,6 @@ async def room(m: Message):
         return
 
     parts = m.text.split(maxsplit=2)
-    if len(parts) < 3:
-        return await m.answer("Формат: /room 1 ссылка")
 
     number = int(parts[1])
     link = parts[2]
@@ -249,7 +252,11 @@ async def send_all(m: Message):
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    await dp.start_polling(bot)
+
+    await asyncio.gather(
+        dp.start_polling(bot),
+        web_server()
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
