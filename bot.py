@@ -78,8 +78,7 @@ async def flow(m: Message):
 @dp.message(F.text == "/list")
 async def list_t(m: Message):
     rows = cursor.execute("SELECT number,name FROM tournaments").fetchall()
-    text = "■■■■■■■:
-"
+    text = "■■■■■■■:"
     for r in rows:
         text += f"■{r[0]} - {r[1]}
 "
