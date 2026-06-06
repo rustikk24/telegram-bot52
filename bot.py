@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
 
 conn.commit()
 
-# ================= OWNERS =================
+# ================= ADMINS =================
 
 OWNERS = {6279994177, 5857555465}
 
@@ -60,6 +60,58 @@ async def start(m: Message):
     conn.commit()
 
     await m.answer("👋 Бот работает")
+
+# ================= TOURNAMENT CREATION =================
+
+tour_state = {}
+
+@dp.message(F.text.startswith("/tour"))
+async def tour(m: Message):
+    if not is_owner(m.from_user.id):
+        return await m.answer("❌ нет доступа")
+
+    tour_state[m.from_user.id] = {}
+    await m.answer("🏆 Введите номер турнира")
+
+@dp.message()
+async def tour_flow(m: Message):
+    if m.from_user.id not in tour_state:
+        return
+
+    data = tour_state[m.from_user.id]
+
+    if "number" not in data:
+        try:
+            data["number"] = int(m.text)
+        except:
+            return await m.answer("Введите число")
+        return await m.answer("📝 Название турнира")
+
+    if "name" not in data:
+        data["name"] = m.text
+        return await m.answer("📅 Дата")
+
+    if "date" not in data:
+        data["date"] = m.text
+        return await m.answer("⏰ Время")
+
+    if "time" not in data:
+        data["time"] = m.text
+
+        cursor.execute("""
+            INSERT INTO tournaments (number, name, date, time)
+            VALUES (?, ?, ?, ?)
+        """, (
+            data["number"],
+            data["name"],
+            data["date"],
+            data["time"]
+        ))
+
+        conn.commit()
+        del tour_state[m.from_user.id]
+
+        return await m.answer("✅ Турнир создан")
 
 # ================= LIST =================
 
@@ -139,7 +191,7 @@ async def card(m: Message):
 
     parts = m.text.split(maxsplit=2)
     if len(parts) < 3:
-        return await m.answer("Формат: /card 1 реквизиты")
+        return await m.answer("Формат: /card 1 текст")
 
     number = int(parts[1])
     value = parts[2]
