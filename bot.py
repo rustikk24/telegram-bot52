@@ -80,8 +80,7 @@ async def list_t(m: Message):
     rows = cursor.execute("SELECT number,name FROM tournaments").fetchall()
     text = "■■■■■■■:"
     for r in rows:
-        text += f"■{r[0]} - {r[1]}
-"
+        text += f"■{r[0]} - {r[1]}"
     await m.answer(text)
 # ================= JOIN =================
 @dp.message(F.text.startswith("/join"))
